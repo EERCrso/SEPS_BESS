@@ -1,35 +1,54 @@
 from matplotlib import pyplot as plt
 import pandas as pd
+import numpy as np
 import baterry
 import functions
 
-#inicializacia data
+#inicializacia data SEPS
 df=pd.read_csv("FVE_2021_1MIN_FULL_NO_DIFF.csv",sep=";")
 data=df["SR"].tolist() # oprions SR  SSD  ZSD  VSD
 
-den_od=139
-den_do=164
-FVE_production=data[den_od*1441:den_do*1441] # vybrane interevali dni
+den_od=140
+den_do=141
+#FVE_production=data[den_od*1441:den_do*1441] # vybrane interevali dni
+FVE_production=data[den_od*1441+200:den_od*1441+800] # vybrane interevali dni
+#FVE_production=data[:] #ROK
+
+
+#inicializacia dataharmonia
+
+#df=pd.read_csv("data_LVN_20.csv",sep=";")
+#data=df["P_[kW]"].tolist() # oprions SR  SSD  ZSD  VSD
+
+#den_od=3
+#den_do=8
+#FVE_production=data[den_od*28820:den_do*28820] # vybrane interevali dni
+#FVE_production=data[den_od*1441+500:den_od*1441+800] # vybrane interevali dni
 #FVE_production=data[:] #ROK
 
 
 baterka1= baterry.baterry(Name="TEST",
-                          MWhrated=600,
-                          MWinstalled_power=70,
-                          status=None,)
+                          MWhrated=5000,
+                          MWinstalled_power=100,
+                          status=None,
+                          charge_losses=0.5,
+                          discharge_losses=0.5,
+                          idling_losses=1.25e-3,
+                          limit_capacity=True,operation_timestep=60)
 
 #settings
-trieda="B"
+trieda="A"
 static_window=False # static or floating window
 average_method=True
+vahovanie=False
+graphs=True
 
-
-cum_time=15
+cum_time=20
 baterry_limit_nabijania=True
-deadband=1
+deadband=0.01* baterka1._MWinstalled_power # deadband  5% z inštalovane vykonu
 
-slope_for_classB=1
-regulate_at_MW_max_ratio = 0.8
+slope_for_classB=0.1
+regulate_at_MW_max_ratio = 0.66
 start_time_for_B_in_h=4 # not functional
 end_time_for_B_in_h=21 # not functional
 #inicializačne konštanty
@@ -75,7 +94,7 @@ for t, val_FVE in enumerate(FVE_production):
                 B1_past=B1
                 B0_past = B0
                 average_past=average
-                average,B0,B1 = functions.analyze_FVE(list_of_values,average_past=average_past)
+                average,B0,B1 = functions.analyze_FVE(list_of_values,average_past=average_past,vahovanie=vahovanie)
                 sub_slope_time=0
 
             if average_method == True: # average method
@@ -89,7 +108,7 @@ for t, val_FVE in enumerate(FVE_production):
             B1_past = B1
             B0_past = B0
             average_past = average
-            average, B0, B1 = functions.analyze_FVE(FVE_production[t-cum_time:t], average_past=average_past)
+            average, B0, B1 = functions.analyze_FVE(FVE_production[t-cum_time:t], average_past=average_past,vahovanie=vahovanie)
             sub_slope_time = 0
 
             if average_method == True: # average method
@@ -103,8 +122,7 @@ for t, val_FVE in enumerate(FVE_production):
         status, value_baterry,release_energy,regulated_FVE = functions.BMS_class_A_smooth_core(FVE=val_FVE,
                                                                     expectations=expectation,
                                                                     baterry=baterka1,
-                                                                    deadband=deadband,
-                                                                    baterry_spetna_vazba=baterry_limit_nabijania)
+                                                                    deadband=deadband)
 
     ##############################
     # BMS CLASS B time_shift
@@ -201,8 +219,7 @@ for t, val_FVE in enumerate(FVE_production):
     status, value_baterry,release_energy,regulated_FVE = functions.BMS_class_A_smooth_core(FVE=val_FVE,
                                                                         expectations=expectation,
                                                                         baterry=baterka1,
-                                                                        deadband=deadband,
-                                                                        baterry_spetna_vazba=baterry_limit_nabijania)
+                                                                        deadband=deadband)
 
 
     ##############################
@@ -224,45 +241,76 @@ for t, val_FVE in enumerate(FVE_production):
 ####################
 # charts
 ####################
+if graphs == True:
+    neregulacia = functions.list_substraction( Smooth_production, regulated_FVE_operations )
+    fig, axs = plt.subplots(3,figsize=(20, 15))
+    axs[0].plot(neregulacia,lw=0.3)
+    axs[0].set_ylabel("P [MW]")
+    axs[0].legend(['Unregulated'])
+    axs[0].set_xlabel("čas t [min]")
 
-neregulacia = functions.list_substraction( Smooth_production, regulated_FVE_operations )
-fig, axs = plt.subplots(3,figsize=(15, 15))
-axs[0].plot(neregulacia,lw=0.3)
-axs[0].set_ylabel("P [MW]")
-axs[0].legend(['Unregulated'])
-axs[0].set_xlabel("čas t [min]")
+    axs[1].plot(checker_list_enought_power,lw=1)
+    axs[1].set_ylim(-1, 2)
+    axs[1].set_ylabel("logicka hodnota [%]")
+    axs[1].legend(['Dostatočny vykon BESS 1 == TRUE'])
+    axs[1].set_xlabel("čas t [min]")
 
-axs[1].plot(checker_list_enought_power,lw=1)
-axs[1].set_ylim(-1, 2)
-axs[1].set_ylabel("logicka hodnota [%]")
-axs[1].legend(['Dostatočny vykon BESS 1 == TRUE'])
-axs[1].set_xlabel("čas t [min]")
+    axs[2].plot(checker_list_enought_capacity,lw=1)
+    axs[2].set_ylim(-1, 2)
+    axs[2].set_ylabel("logicka hodnota [%]")
+    axs[2].legend(['Dostatočna kapacita BESS 1 == TRUE '])
+    axs[2].set_xlabel("čas t [min]")
+    plt.show()
 
-axs[2].plot(checker_list_enought_capacity,lw=1)
-axs[2].set_ylim(-1, 2)
-axs[2].set_ylabel("logicka hodnota [%]")
-axs[2].legend(['Dostatočna kapacita BESS 1 == TRUE '])
-axs[2].set_xlabel("čas t [min]")
-plt.show()
+    fontsize=30
+    fig, axs = plt.subplots(2,figsize=(25,35 ))
+    axs[0].plot(FVE_production,lw=0.75)
+    #axs[0].plot(Smooth_production,lw=0.3)
+    axs[0].plot(regulated_FVE_operations,lw=1.2)
+    axs[0].plot(real_baterry_operations,lw=1)
+    axs[0].set_ylabel("P [MW]",fontsize=fontsize)
+    axs[0].legend(['$P_{FVE}$','$P_{REG}$','$P_{saldo}$ (+vybíjanie | -nabíjanie )'] , fontsize=fontsize)
+    axs[0].set_xlabel("čas t [min]",fontsize=fontsize)
+    axs[0].tick_params(axis="x", labelsize=fontsize)
+    axs[0].tick_params(axis="y", labelsize=fontsize)
+
+    axs[1].plot(baterry_percentage_capacity,lw=1)
+    axs[1].set_ylim(0, 100)
+    #axs[1].set_title('% kapacita baterie')
+    axs[1].set_ylabel("aktuálna kapacita [%]",fontsize=fontsize)
+    axs[1].set_xlabel("čas t [min]",fontsize=fontsize)
+    axs[1].axhline(y = 10, color = 'r', linestyle = 'dashed')
+    axs[1].axhline(y = 90, color = 'r', linestyle = 'dashed')
+    axs[1].tick_params(axis="x", labelsize=fontsize)
+    axs[1].tick_params(axis="y", labelsize=fontsize)
+    plt.show()
+
+    # male okno
+    # fig, axs = plt.subplots(1,figsize=(5, 10))
+    # axs.plot(FVE_production[50:],lw=0.5)
+    # #axs[0].plot(Smooth_production,lw=0.3)
+    # axs.plot(regulated_FVE_operations[50:],lw=1.2)
+    # axs.plot(real_baterry_operations[50:],lw=1.2)
+    # axs.set_ylabel("P [MW]", fontsize=20)
+    # axs.legend(['$P_{FVE}$','$P_{REG}$','$P_{saldo}$ (+vybíjanie | -nabíjanie )'], fontsize=14,loc="center")
+    # axs.set_xlabel("t [min]" ,fontsize=20)
+    # axs.tick_params(axis="x", labelsize=20)
+    # axs.tick_params(axis="y", labelsize=20)
+    # plt.text(10, 115, 'n='+ str(cum_time) + ' min', fontsize = 20)
+    # plt.show()
 
 
-fig, axs = plt.subplots(2,figsize=(15, 15))
-axs[0].plot(FVE_production,lw=0.3)
-#axs[0].plot(Smooth_production,lw=0.3)
-axs[0].plot(regulated_FVE_operations,lw=1)
-axs[0].plot(real_baterry_operations,lw=1)
-axs[0].set_ylabel("P [MW]")
-axs[0].legend(['FVE_production','FVE_regulated','BESS_operation (+discharge | -charge )'])
-axs[0].set_xlabel("čas t [min]")
-
-axs[1].plot(baterry_percentage_capacity,lw=1)
-axs[1].set_ylim(0, 100)
-axs[1].set_title('% kapacita baterie')
-axs[1].set_ylabel("aktualna kapacita [%]")
-axs[1].set_xlabel("čas t [min]")
-axs[1].axhline(y = 10, color = 'r', linestyle = 'dashed')
-axs[1].axhline(y = 90, color = 'r', linestyle = 'dashed')
-plt.show()
+    # fig, axs = plt.subplots(1,figsize=(22, 13))
+    # x = np.arange(0, 1441, 1)
+    # axs.plot(FVE_production,lw=3, color="red")
+    # axs.fill_between( x,0 ,FVE_production,facecolor='blue',alpha=0.3)
+    # #axs[0].plot(Smooth_production,lw=0.3)
+    # axs.set_ylabel("P [MW]",fontsize=20)
+    # axs.legend(['FVE_production'], fontsize=20)
+    # axs.set_xlabel("čas t [min]", fontsize=20)
+    # axs.tick_params(axis="x", labelsize=20)
+    # axs.tick_params(axis="y", labelsize=20)
+    # plt.show()
 
 #STATISTA
 print("******INFO*******")
@@ -278,6 +326,8 @@ print("Inštalovany výkon       = " + str(baterka1._MWinstalled_power) + ' MWh'
 print("No. nedostatok vykonu   = " + str(checker_list_enought_power.count(0)) + ' min')
 print("Kapacita                = " + str(baterka1._MWhrated) + ' MWh')
 print("No. nedostatok kapacity = " + str(checker_list_enought_capacity.count(0)) + ' min')
+print("No. charging cyklov     = " + str(baterka1.number_of_charging_cycles()) + ' -')
+print("No. discharging cyklov  = " + str(baterka1.number_of_discharging_cycles()) + ' -')
 
 # todo count fails
 #  evaluate max power, NO of changes of unabili to charge

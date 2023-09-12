@@ -7,13 +7,22 @@ def saldo(FVE_production,battery):
 
     return saldo
 
-def analyze_FVE(list_of_values,average_past=0):
+def analyze_FVE(list_of_values,average_past=0,vahovanie=False):
 
     time= list(range(0,len(list_of_values)))
 
+    if vahovanie==True and len(time)>0:
+        dlzka=len(list_of_values)
+        vahy=[(x+1)/(dlzka/1.88) for x in time]
+
 
     if len(list_of_values) != 0:
-        average = calc_average(list_of_values)
+
+        if vahovanie==True:
+            x1w1 = [x * y for x, y in zip(list_of_values, vahy)]
+            average = calc_average(x1w1)
+        else:
+            average = calc_average(list_of_values)
     else:
         average =0
 
@@ -52,7 +61,7 @@ def cumval(value,list_of_values, cumulation_no=10):
 
 
 
-def BMS_class_A_smooth_core(FVE,expectations,baterry,deadband=0,baterry_spetna_vazba=True):
+def BMS_class_A_smooth_core(FVE,expectations,baterry,deadband=0):
 
     percentage_stored=baterry.get_percented_stored()
 
@@ -65,30 +74,28 @@ def BMS_class_A_smooth_core(FVE,expectations,baterry,deadband=0,baterry_spetna_v
         status = "discharge"
         proposed_value=saldo
         # regulacia na dolny  limit
-        if baterry_spetna_vazba ==True:
-
-
-
-            if percentage_stored <0.20:
-                proposed_value=proposed_value*0.8
-
-            if percentage_stored <0.14:
-                proposed_value=proposed_value*0.5
-
-            if percentage_stored <0.11:
-                proposed_value=proposed_value*0.2
-
-            if percentage_stored <0.10:
-                proposed_value=proposed_value*0
-
-            if percentage_stored > 0.80:
-                proposed_value = proposed_value * 1.2
-
-            if percentage_stored > 0.86:
-                proposed_value = proposed_value * 1.5
-
-            if percentage_stored > 0.88:
-                proposed_value = proposed_value * 1.8
+        # if baterry_spetna_vazba ==True:
+        #
+        #     if percentage_stored <0.20:
+        #         proposed_value=proposed_value*0.8
+        #
+        #     if percentage_stored <0.14:
+        #         proposed_value=proposed_value*0.5
+        #
+        #     if percentage_stored <0.11:
+        #         proposed_value=proposed_value*0.2
+        #
+        #     if percentage_stored <0.10:
+        #         proposed_value=proposed_value*0
+        #
+        #     if percentage_stored > 0.80:
+        #         proposed_value = proposed_value * 1.2
+        #
+        #     if percentage_stored > 0.86:
+        #         proposed_value = proposed_value * 1.5
+        #
+        #     if percentage_stored > 0.88:
+        #         proposed_value = proposed_value * 1.8
 
         release_enery=baterry.discharge(abs(proposed_value))
 
@@ -97,31 +104,35 @@ def BMS_class_A_smooth_core(FVE,expectations,baterry,deadband=0,baterry_spetna_v
         status="charge"
         proposed_value=saldo
         # regulacia na horny limit
-        if baterry_spetna_vazba == True:
-            if percentage_stored >0.80:
-                proposed_value=proposed_value*0.8
-
-            if percentage_stored >0.86:
-                proposed_value=proposed_value*0.5
-
-            if percentage_stored >0.88:
-                proposed_value=proposed_value*0.2
-
-            if percentage_stored >0.9:
-                proposed_value=proposed_value*0.0
-
-            if percentage_stored <0.20:
-                proposed_value=proposed_value*1.2
-
-            if percentage_stored <0.14:
-                proposed_value=proposed_value*1.5
-
-            if percentage_stored <0.11:
-                proposed_value=proposed_value*1.8
+        # if baterry_spetna_vazba == True:
+        #     if percentage_stored >0.80:
+        #         proposed_value=proposed_value*0.8
+        #
+        #     if percentage_stored >0.86:
+        #         proposed_value=proposed_value*0.5
+        #
+        #     if percentage_stored >0.88:
+        #         proposed_value=proposed_value*0.2
+        #
+        #     if percentage_stored >0.9:
+        #         proposed_value=proposed_value*0.0
+        #
+        #     if percentage_stored <0.20:
+        #         proposed_value=proposed_value*1.2
+        #
+        #     if percentage_stored <0.14:
+        #         proposed_value=proposed_value*1.5
+        #
+        #     if percentage_stored <0.11:
+        #         proposed_value=proposed_value*1.8
 
 
         release_enery=baterry.charge(abs(proposed_value))
 
+
+    if saldo < 0+deadband and saldo > 0-deadband:
+        status="iddle"
+        baterry.iddle()
 
     regulated_FVE = FVE + release_enery
 
